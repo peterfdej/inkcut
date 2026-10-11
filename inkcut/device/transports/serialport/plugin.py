@@ -23,7 +23,6 @@ from serial.tools.list_ports import comports
 
 from inkcut.device.transports.raw.plugin import RawFdTransport, RawFdProtocol
 
-
 #: Reverse key values
 SERIAL_PARITIES = {v: k for k, v in serial.PARITY_NAMES.items()}
 
@@ -109,6 +108,102 @@ class SerialTransport(RawFdTransport):
             #: squashed by twisted
             log.error("{} | {}".format(config.port, traceback.format_exc()))
             raise
+
+    def disconnect(self):
+        if self.connection:
+            log.debug("-- {} | closed by request".format(self.device_path))
+
+            connection = self.connection
+
+            try:
+                # Remove the Windows serial events from the reactor
+                connection.reactor.removeEvent(
+                    connection._overlappedRead.hEvent
+                )
+                connection.reactor.removeEvent(
+                    connection._overlappedWrite.hEvent
+                )
+
+                # Close the underlying pySerial port
+                if connection._serial.is_open:
+                    connection._serial.close()
+
+            except Exception:
+                log.error(
+                    "{} | error closing serial port:\n{}".format(
+                        self.device_path,
+                        traceback.format_exc()
+                    )
+                )
+
+            self.connection = None
+
+        self.connected = False
+
+    def query_size(self):
+        """Query the plotter work area using the OH; command."""
+
+        import serial
+
+        config = self.config
+        port = config.port
+
+        log.debug("PNC QUERY: closing Inkcut serial connection")
+        self.disconnect()
+
+        ser = None
+
+        try:
+            log.debug("PNC QUERY: opening %s with pySerial", port)
+
+            ser = serial.Serial(
+                port=port,
+                baudrate=config.baudrate,
+                bytesize=config.bytesize,
+                parity=SERIAL_PARITIES[config.parity],
+                stopbits=config.stopbits,
+                timeout=1,
+                xonxoff=config.xonxoff,
+                rtscts=config.rtscts,
+                dsrdtr=config.dsrdtr
+            )
+
+            log.debug("PNC QUERY: pySerial opened")
+
+            ser.reset_input_buffer()
+
+            log.debug("PNC QUERY: sending OH;")
+
+            ser.write(b"OH;")
+            ser.flush()
+
+            response = ser.read_until(b"\r")
+
+            log.debug("PNC QUERY: RAW RESPONSE = %r", response)
+
+            if not response:
+                raise IOError("No response from plotter to OH;")
+
+            response = response.decode("ascii").strip()
+
+            log.debug("PNC QUERY: RESPONSE = %s", response)
+
+            values = [int(x.strip()) for x in response.split(",")]
+
+            if len(values) != 4:
+                raise ValueError(
+                    "Unexpected OH response: {!r}".format(response)
+                )
+
+            log.debug("PNC QUERY: RESULT = %s", values)
+
+            return values
+
+        finally:
+            if ser is not None:
+                ser.close()
+                log.debug("PNC QUERY: pySerial closed")
+
 
 
 class SerialPlugin(Plugin):

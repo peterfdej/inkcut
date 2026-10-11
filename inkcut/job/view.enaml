@@ -438,16 +438,16 @@ enamldef MaterialDockItem(DockItem):
                     maximum = 99999.9
                     #maximum << to_unit(job.material.size[1], plugin.units)
                     #single_step = 0.1
-#                Label:
-#                    text = ""
-#                PushButton:
-#                    text = "Read from device"
-#                    tool_tip = "Get the material size by querying the device."
-#                    clicked ::
-#                        try:
-#                            job.material.size = plugin.device.querySize()
-#                        except NotImplementedError:
-#                            pass
+                PushButton:
+                    text = "Read from device"
+                    tool_tip = "Get the material size by querying the device."
+                    clicked ::
+                        device_plugin = workbench.get_plugin('inkcut.device')
+                        size_mm = device_plugin.device.querySize()
+                        job.material.size = [
+                            from_unit(size_mm[1], 'mm'),
+                            from_unit(size_mm[0], 'mm')
+                        ]
 
         Container:
             padding = 0

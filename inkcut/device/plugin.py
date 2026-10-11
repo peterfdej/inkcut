@@ -614,6 +614,26 @@ class Device(Model):
         if cmd:
             yield defer.maybeDeferred(self.connection.write, cmd)
 
+    def querySize(self):
+        """Query the actual plot area from the connected device."""
+
+        if not self.connection:
+            raise IOError("Device has no connection")
+
+        values = self.connection.query_size()
+
+        if len(values) != 4:
+            raise ValueError(
+                "Unexpected plotter size response: {!r}".format(values)
+            )
+
+        x1, y1, x2, y2 = values
+
+        return [
+            (x2 - x1) / 40.0,
+            (y2 - y1) / 40.0
+        ]
+
     def move(self, position, absolute=True):
         """ Move to the given position. By default this delegates handling
         to the active protocol.

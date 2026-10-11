@@ -54,12 +54,21 @@ enamldef DriversManifest(PluginManifest):
             model = 'PNC-950'
             width = '24in'
             protocols = ['camm-gl1']			
-			
+
         DeviceDriver:
             manufacturer = 'Roland'
             model = 'PNC-1000'
             width = '46.8cm'
             protocols = ['camm-gl1']
+
+        DeviceDriver:
+            manufacturer = 'Roland'
+            model = 'PNC-1100'
+            width = '60cm'
+            protocols = ['hpgl']
+            default_config = {
+              'swap_xy': True
+            }
 
         DeviceDriver:
             manufacturer = 'Roland'

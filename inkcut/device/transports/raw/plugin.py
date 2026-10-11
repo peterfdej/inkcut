@@ -50,6 +50,7 @@ class RawFdProtocol(Protocol, object):
         self._transport.fd = None
         device_path = self._transport.device_path
         log.debug("-- {} | dropped: {}".format(device_path, reason))
+        self._transport.connection = None
         self.delegate.connection_lost()
 
 
@@ -96,7 +97,10 @@ class RawFdTransport(DeviceTransport):
         if hasattr(data, 'encode'):
             data = data.encode()
         self.last_write = data
-        self.connection.write(data)
+
+        self.connection._serial.write(data)
+        self.connection._serial.flush()
+
 
     def disconnect(self):
         if self.connection:
