@@ -1293,10 +1293,7 @@ class DevicePlugin(Plugin):
         job = device.job
 
         r = QtGui.QTransform()
-        if device.config.swap_xy:
-            # Rotate area to match swapped axis
-            r.rotate(90)
-            r.scale(-1, 1)
+
 
         if device and device.area:
             area = device.area
@@ -1325,4 +1322,19 @@ class DevicePlugin(Plugin):
         if change['type'] == 'update' and self.device.job:
             x, y, z = change['value']
             preview_plugin = self.workbench.get_plugin('inkcut.preview')
-            preview_plugin.live_preview.update(change['value'])
+            position = change['value']
+
+            if self.device.config.swap_xy:
+                x, y, z = position
+
+                job = self.device.job
+                paper_width = job.material.width()
+                margin_right = job.material.padding_right
+
+                position = [
+                    paper_width - margin_right - y,
+                    x,
+                    z
+                ]
+
+            preview_plugin.live_preview.update(position)

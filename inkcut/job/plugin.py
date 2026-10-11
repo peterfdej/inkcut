@@ -12,6 +12,7 @@ Created on Jul 12, 2015
 import os
 import sys
 import enaml
+from enaml.qt import QtGui
 from atom.api import Instance, Enum, List, Str, Int, Float, observe
 from inkcut.core.api import Plugin, unit_conversions, log
 
@@ -195,7 +196,24 @@ class JobPlugin(Plugin):
 
         #: Apply the final output transforms from the device
         transform = device.transform if device else lambda p: p
+        
+        #: Preview transformation for the Roland PNC-1100
+        r = QtGui.QTransform()
 
+        if device and device.config.swap_xy and job.material:
+            width = job.material.width()
+            margin_right = job.material.padding_right
+
+            if job.model:
+                bbox = job.cut_path.boundingRect()
+
+                # Plaats het ontwerp rechts op het materiaal,
+                # zonder de letters te spiegelen.
+                r = QtGui.QTransform.fromTranslate(
+                    width - margin_right - bbox.right(),
+                    0
+                )
+                
         if device and device.area:
             area = device.area
             view_items.append(
@@ -210,8 +228,10 @@ class JobPlugin(Plugin):
         if job.model:
             view_items.extend(
                 [
-                    dict(path=transform(job.move_path), pen=plot.pen_up),
-                    dict(path=transform(job.cut_path), pen=plot.pen_down),
+                    #dict(path=transform(job.move_path), pen=plot.pen_up),
+                    #dict(path=transform(job.cut_path), pen=plot.pen_down),
+                    dict(path=transform(r.map(job.move_path)), pen=plot.pen_up),
+                    dict(path=transform(r.map(job.cut_path)), pen=plot.pen_down),
                 ]
             )
 
