@@ -1,3 +1,4 @@
+
 """
 Copyright (c) 2017, Jairus Martin.
 
@@ -11,53 +12,29 @@ Created on Jul 12, 2015
 """
 from __future__ import print_function
 
+import json
 import os
+
 import jsonpickle as pickle
-
 from atom.api import Str, Value
-
-#from enaml.qt.QtWidgets import QApplication
+from enaml.layout.geometry import Rect
+from enaml.qt.QtCore import QTimer
 from enaml.widgets.api import Container
+from enaml.widgets.window import Window
 from enaml.workbench.ui.api import Workspace
 
 import enaml
+
 with enaml.imports():
     from inkcut.ui.manifest import UIManifest
 
 from inkcut.core.utils import log
-from enaml.qt.QtCore import QTimer
 
-def debug_layout(node, level=0):
-    if node is None:
-        return
-
-    indent = "  " * level
-
-    print(
-        "{}{} name={} position={} orientation={} sizes={}".format(
-            indent,
-            type(node).__name__,
-            getattr(node, "name", None),
-            getattr(node, "position", None),
-            getattr(node, "orientation", None),
-            getattr(node, "sizes", None)
-        ),
-        flush=True
-    )
-
-    children = getattr(node, "children", None)
-
-    if callable(children):
-        for child in children():
-            debug_layout(child, level + 1)
 
 class InkcutWorkspace(Workspace):
-    """ A custom Workspace class for the crash course example.
+    """Inkcut workspace with persistent dock and window layouts."""
 
-    """
-    #: Storage for the plugin manifest's id.
     _manifest_id = Str()
-    #_save_on_exit = Value()
     _dock_area = Value()
     _save_on_closing = Value()
 
@@ -71,45 +48,25 @@ class InkcutWorkspace(Workspace):
         self.workbench.get_plugin('inkcut.ui')
         self.load_area()
 
-
-        # Test: opslaan voordat het hoofdvenster wordt vernietigd.
-        from enaml.widgets.window import Window
-
         def save_on_closing(change):
-            print(
-                "INKCUT TEST: window closing, children =",
-                self.content.children,
-                flush=True
-            )
+            for window in Window.windows:
+                self.save_window(window)
+
             self.save_area()
 
-        #for window in Window.windows:
-        #    window.observe('closing', save_on_closing)
-        print(
-            "INKCUT TEST: aantal vensters tijdens start =",
-            len(Window.windows),
-            flush=True
-        )
-
         for window in Window.windows:
-            print("INKCUT TEST: gevonden venster =", window, flush=True)
             window.observe('closing', save_on_closing)
-            print(
-                "INKCUT TEST: closing observers =",
-                window.has_observers('closing'),
-                flush=True
-            )
 
+            def restore_window(w=window):
+                self.load_window(w)
+
+            QTimer.singleShot(0, restore_window)
+
+        # Keep the callback alive while the workspace is active.
         self._save_on_closing = save_on_closing
 
     def stop(self):
-        """ Stop the workspace instance.
-
-        This method will unregister the workspace's plugin that was
-        registered on start.
-
-        """
-        print("INKCUT TEST: workspace.stop() aangeroepen", flush=True)
+        """Stop the workspace and unregister its UI manifest."""
         self.save_area()
         self.workbench.unregister(self._manifest_id)
 
@@ -124,48 +81,102 @@ class InkcutWorkspace(Workspace):
 
         try:
             layout = area.save_layout()
-            print("INKCUT TEST: LAYOUT BIJ AFSLUITEN", flush=True)
-            debug_layout(layout)
 
             with open('inkcut.workspace.db', 'w', encoding='utf-8') as f:
                 f.write(pickle.dumps(layout))
-
-            print("INKCUT TEST: dock layout opgeslagen", flush=True)
 
         except Exception as e:
             log.warning("Error saving dock layout: {}".format(e))
 
     def load_area(self):
-        """Create the dock area and restore the saved layout."""
-        plugin = self.workbench.get_plugin("inkcut.ui")
+        """Create the dock area and restore its saved layout."""
+        plugin = self.workbench.get_plugin('inkcut.ui')
 
         area = plugin.create_new_area()
         area.name = 'dock_area'
         area.set_parent(self.content)
 
-        # Keep a reference for saving on exit.
         self._dock_area = area
 
         filename = 'inkcut.workspace.db'
 
-        if os.path.exists(filename):
-            try:
-                with open(filename, 'r', encoding='utf-8') as f:
-                    layout = pickle.loads(f.read())
+        if not os.path.exists(filename):
+            return
 
-                if layout is not None:
-                    def restore_layout():
-                        print("INKCUT TEST: GELADEN LAYOUT", flush=True)
-                        debug_layout(layout)
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                layout = pickle.loads(f.read())
 
+            if layout is not None:
+                def restore_layout():
+                    try:
                         area.apply_layout(layout)
+                    except Exception as e:
+                        log.warning(
+                            "Error applying dock layout: {}".format(e)
+                        )
 
-                        print("INKCUT TEST: LAYOUT NA APPLY", flush=True)
-                        debug_layout(area.save_layout())
+                QTimer.singleShot(0, restore_layout)
 
-                    QTimer.singleShot(0, restore_layout)
+        except Exception as e:
+            log.warning("Error restoring dock layout: {}".format(e))
 
-            except Exception as e:
-                log.warning(
-                    "Error restoring dock layout: {}".format(e)
-                )
+    def save_window(self, window):
+        """Save the normal window geometry and maximized state."""
+        try:
+            maximized = window.is_maximized()
+
+            if maximized:
+                # Qt remembers the normal geometry while maximized.
+                qt_window = window.proxy.widget
+                rect = qt_window.normalGeometry()
+
+                data = {
+                    'x': rect.x(),
+                    'y': rect.y(),
+                    'width': rect.width(),
+                    'height': rect.height(),
+                    'maximized': True,
+                }
+            else:
+                rect = window.geometry()
+
+                data = {
+                    'x': rect.x,
+                    'y': rect.y,
+                    'width': rect.width,
+                    'height': rect.height,
+                    'maximized': False,
+                }
+
+            with open('inkcut.window.json', 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+
+        except Exception as e:
+            log.warning("Error saving window geometry: {}".format(e))
+
+    def load_window(self, window):
+        """Restore the saved window geometry and maximized state."""
+        filename = 'inkcut.window.json'
+
+        if not os.path.exists(filename):
+            return
+
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            rect = Rect(
+                data['x'],
+                data['y'],
+                data['width'],
+                data['height']
+            )
+
+            window.set_geometry(rect)
+
+            if data.get('maximized', False):
+                window.maximize()
+
+        except Exception as e:
+            log.warning("Error restoring window geometry: {}".format(e))
