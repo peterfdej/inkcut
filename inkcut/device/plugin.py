@@ -1127,6 +1127,7 @@ class DevicePlugin(Plugin):
         """
         job.info.reset()
         job.info.started = datetime.now()
+        self.reset_preview()
         return self.device.submit(job)
 
     def _default_device(self):
