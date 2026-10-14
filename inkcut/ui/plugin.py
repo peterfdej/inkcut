@@ -111,14 +111,39 @@ class InkcutPlugin(Plugin):
             plugins.append(ConsoleManifest)
             plugins.append(MonitorManifest)
 
-            #: Load any plugins defined as extension points
-            for entry_point in importlib.metadata.entry_points(
-                    group='inkcut.plugin'):
-                plugins.append(entry_point.load())
+            plugins.extend(self.load_ext_plugins())
 
         #: Install all of them
         for Manifest in plugins:
             w.register(Manifest())
+
+    def load_ext_plugins(self):
+        """ Load any plugins defined as extension points
+        """
+        plugins = []
+        try:
+            entry_points = importlib.metadata.entry_points()
+            if hasattr(entry_points, 'select'):
+                entry_points = entry_points.select(group='inkcut.plugin')
+            elif isinstance(entry_points, dict):
+                entry_points = entry_points.get('inkcut.plugin', ())
+            else:
+                # Older iterable APIs do not support selecting by group.
+                entry_points = (
+                    entry_point for entry_point in entry_points
+                    if entry_point.group == 'inkcut.plugin'
+                )
+        except Exception as e:
+            log.exception(e)
+            return plugins
+
+        for entry_point in entry_points:
+            try:
+                log.debug("Loading entry point {}".format(entry_point))
+                plugins.append(entry_point.load())
+            except Exception as e:
+                log.exception(e)
+        return plugins
 
     def _bind_observers(self):
         """ Setup the observers for the plugin.

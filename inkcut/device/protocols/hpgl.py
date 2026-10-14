@@ -7,15 +7,18 @@ Created on Jul 25, 2015
 from atom.api import Instance, Float, Bool, Int
 from inkcut.device.plugin import DeviceProtocol, Model
 from inkcut.core.utils import log
+from inkcut.core.svg import INKCUT_DPI
 
 
 class HPGLConfig(Model):
     #: Pad option
     pad = Bool().tag(config=True)
 
+    #: Whether use seperate PU/PD and PA or just PU/PD
+    separate_z_moves = Bool().tag(config=True)
 
 class HPGLProtocol(DeviceProtocol):
-    scale = Float(1021/90.0)
+    scale = Float(1021/INKCUT_DPI)
 
     #: Pad option
     config = Instance(HPGLConfig, ()).tag(config=True)
@@ -37,7 +40,11 @@ class HPGLProtocol(DeviceProtocol):
         """
         x, y = int(x*self.scale), int(y*self.scale)
         if absolute:
-            self.write("%s%i,%i;" % ('PD' if z else 'PU', x, y))
+            if self.config.separate_z_moves:
+                self.write('PD;' if z else 'PU;')
+                self.write("PA%i,%i;" % (x, y))
+            else:
+                self.write("%s%i,%i;" % ('PD' if z else 'PU', x, y))
         else:
             self.write('PR%i,%i;' % (x, y))
 
