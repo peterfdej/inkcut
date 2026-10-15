@@ -20,10 +20,28 @@ from enaml.widgets.api import (
 )
 from enamlx.widgets.api import DoubleSpinBox
 from inkcut.core.api import Model, DockItem
-from inkcut.core.utils import to_unit, load_icon
+from inkcut.core.utils import to_unit, from_unit, load_icon
 from inkcut.preview.plot_view import PlotView
 from .plugin import DeviceConfig
 
+def setup_live_plot(graph):
+    from enaml.qt.QtCore import QTimer
+
+    view = graph.getViewBox()
+
+    def align_y():
+        y_min, y_max = view.viewRange()[1]
+        target = from_unit(-10, 'mm')
+
+        delta = target - y_min
+        pixel_y = view.viewPixelSize()[1]
+
+        if not pixel_y:
+            return
+
+        view.translateBy(y=delta / pixel_y)
+
+    QTimer.singleShot(0, align_y)
 
 enamldef ConfigView(Container):
     attr model: Model
@@ -245,6 +263,7 @@ enamldef DeviceProgressDockItem(DockItem):
         padding = 0
         PlotView: plot:
             minimum_size = (540, 320)
+            setup = setup_live_plot
             data := preview.plot
             grid << (preview_plugin.show_grid_x, preview_plugin.show_grid_y)
             grid_alpha << preview_plugin.grid_alpha/100.0

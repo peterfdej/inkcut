@@ -1301,7 +1301,7 @@ class DevicePlugin(Plugin):
             view_items.append(
                 dict(path=device.transform(r.map(t.map(device.area.path))),
                      pen=plot.pen_device,
-                     skip_autorange=True)
+                     skip_autorange=(False, True))
             )
 
         if job and job.material:
